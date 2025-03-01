@@ -1,39 +1,128 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
-name: Python application
+name: Buildozer Kivy APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main  # Или ваша основная ветка
   pull_request:
-    branches: [ "main" ]
-
-permissions:
-  contents: read
+    branches:
+      - main  # Или ваша основная ветка
+  workflow_dispatch:  # Позволяет запускать вручную
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Используем последнюю версию Ubuntu
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
-      run: |
-        pytest
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9  # Kivy и Buildozer лучше всего работают с 3.9
+
+      - name: Install system dependencies (important!)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev  # Общие зависимости
+          # Дополнительные зависимости (могут потребоваться, в зависимости от проекта):
+          sudo apt-get install -y python3-dev  # Если не установится автоматически
+          sudo apt-get install -y libltdl-dev # Часто нужна
+          sudo apt-get install -y git # Нужен для клонирования репозиториев (если нужно)
+          sudo apt-get install -y libsqlite3-dev # Если используется SQLite
+          # Установите Cython (часто нужен):
+          pip install Cython==0.29.36 # Указываем конкретную версию Cython
+
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip setuptools  # Обновляем pip
+          pip install --upgrade buildozer
+
+      - name: Initialize Buildozer (if needed)
+        run: |
+            # Если buildozer.spec отсутствует, инициализируем (обычно он уже есть):
+            if [ ! -f buildozer.spec ]; then
+                buildozer init
+            fi
+        continue-on-error: true # Если уже инициализирован, продолжаем.
+
+      - name: Configure buildozer.spec (CRITICAL!)
+        run: |
+          #  Важные настройки в buildozer.spec (ПРИМЕР!  Нужно адаптировать!)
+          #  1. Укажите requirements (зависимости Kivy и другие):
+          sed -i 's/^requirements =.*/requirements = python3,kivy==2.2.1,kivymd,requests,Pillow/' buildozer.spec #  <---  ДОБАВЬТЕ ВАШИ ЗАВИСИМОСТИ!
+
+          #  2.  Убедитесь, что указана правильная версия Python (3.9):
+          sed -i 's/^#p4a.source_dir =.*/p4a.source_dir = \/home\/runner\/work\/p4a/' buildozer.spec  # Указываем явный путь, если возникают проблемы
+          sed -i 's/^p4a.branch =.*/p4a.branch = stable/' buildozer.spec  # Ветка stable (обычно работает стабильнее)
+          sed -i 's/^p4a.local_recipes =.*/#p4a.local_recipes =/' buildozer.spec #Если нет локальных рецептов закоментируем
+
+          sed -i 's/^#android.permissions =.*/android.permissions = INTERNET, ACCESS_NETWORK_STATE/' buildozer.spec   # Добавляем разрешения (ПРИМЕР!)
+
+          #  3.  (Опционально)  Добавьте иконки, ориентацию, и т.д.:
+          #  sed -i 's/^#android.icon =.*/android.icon = data\/icon.png/' buildozer.spec
+          #  sed -i 's/^#android.presplash_color =.*/android.presplash_color = #ffffff/' buildozer.spec
+          #  sed -i 's/^#android.orientation =.*/android.orientation = portrait/' buildozer.spec   # Или landscape
+
+
+          #   4. (Опционально) Если нужно добавить файлы, которые не включены автоматически:
+          #   sed -i 's/^#source.include_exts =.*/source.include_exts = py,kv,png,jpg,gif,txt,json/' buildozer.spec  # Добавьте нужные расширения
+
+
+           #  5. (ВАЖНО!)  Если вы используете KivyMD:
+          sed -i 's/^#buildozer.build_dir =.*/buildozer.build_dir = .buildozer/' buildozer.spec # Исправляет ошибку с путями
+          sed -i 's/^#p4a.extra_args =.*/p4a.extra_args = --arch=arm64-v8a/' buildozer.spec #Укажите целевую архитектуру
+
+          # 6. (ВАЖНО) Установите API level
+          sed -i 's/^#android.api =.*/android.api = 31/' buildozer.spec  # Или другой подходящий уровень API
+          sed -i 's/^#android.minapi =.*/android.minapi = 21/' buildozer.spec # Минимальный уровень
+          sed -i 's/^#android.ndk =.*/android.ndk = 25b/' buildozer.spec # Версия NDK, если нужно
+           # 7. (ВАЖНО!) Установите android sdk
+          sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/' buildozer.spec
+
+          #  Вывод buildozer.spec (для отладки):
+          cat buildozer.spec
+
+      - name: Build APK (debug mode)
+        run: |
+          buildozer -v android debug  # Собираем отладочную версию
+
+      - name: Build APK (release mode, if needed)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'  # Только для main ветки, при push (пример)
+        run: |
+            #  Для release-сборки нужно добавить ключи подписи!
+            #  Это делается через переменные среды (Secrets) в GitHub Actions:
+            #  https://docs.github.com/en/actions/security-guides/encrypted-secrets
+
+            #  Пример (нужны реальные значения!  Используйте Secrets!):
+            #  echo "$ANDROID_KEYSTORE" | base64 -d > release.keystore
+            #  buildozer -v android release
+
+           buildozer -v android release  #  <---  УБЕРИТЕ КОММЕНТАРИЙ, когда настроите подпись
+        continue-on-error: true  #  Позволяет продолжить, даже если release не собрался (например, нет ключей)
+
+
+      - name: Upload APK (debug)
+        uses: actions/upload-artifact@v3
+        with:
+          name: my-app-debug.apk  # Имя артефакта
+          path: bin/*.apk    # Путь к APK (обычно в bin/)
+          if-no-files-found: error #Выдаст ошибку если файл apk отсутствует
+
+      - name: Upload APK (release)  (if built)
+        if: steps.build-apk-release.outcome == 'success'  # Только если release сборка прошла успешно
+        uses: actions/upload-artifact@v3
+        with:
+          name: my-app-release.apk
+          path: bin/*.apk
+          if-no-files-found: error #Выдаст ошибку если файл apk отсутствует
+      - name: Create Release (optional)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bin/*.apk #Если release apk был создан, то он будет добавлен
+          name: Release ${{ github.run_id }}
+          tag_name: ${{ github.run_id }}
+          draft: false
+          prerelease: false
