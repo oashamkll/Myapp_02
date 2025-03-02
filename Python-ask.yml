@@ -1,0 +1,42 @@
+name: Build Kivy APK
+
+on:
+  push:
+    branches:
+      - main  # Укажите свою основную ветку
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'  # Версия Python, которую поддерживает Kivy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip python3-venv libffi-dev libssl-dev
+          pip install --upgrade pip virtualenv
+
+      - name: Install Buildozer
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade Cython buildozer
+
+      - name: Build APK
+        run: |
+          source venv/bin/activate
+          buildozer android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: kivy-apk
+          path: bin/*.apk
