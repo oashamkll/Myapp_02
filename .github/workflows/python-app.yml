@@ -1,0 +1,54 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y python3-pip build-essential git
+        pip install --upgrade cython
+        
+    - name: Install Buildozer and dependencies
+      run: |
+        pip install buildozer
+        sudo apt install -y \
+          python3-pip \
+          python3-setuptools \
+          python3-venv \
+          libffi-dev \
+          libssl-dev \
+          liblzma-dev \
+          zlib1g-dev \
+          libncurses5-dev \
+          libgdbm-dev \
+          libnss3-dev \
+          libsqlite3-dev \
+          libreadline-dev \
+          libbz2-dev \
+          libgdbm-compat-dev \
+          libffi-dev \
+          libgmp-dev \
+          libmpfr-dev \
+          libmpc-dev
+
+    - name: Build APK
+      run: buildozer android debug
